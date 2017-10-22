@@ -140,7 +140,7 @@ class App < Sinatra::Base
     query = <<~SQL
       SELECT msg.id AS id, msg.created_at, msg.content, user.name, user.display_name, user.avatar_icon
       FROM message AS msg INNER JOIN user ON msg.user_id = user.id
-      WHERE msg.id > ? AND msg.channel_id = ? ORDER BY msg.id DESC LIMIT 100
+      WHERE msg.id > ? AND msg.channel_id = ? ORDER BY msg.id DESC
     SQL
     statement = db.prepare(query)
     rows = statement.execute(last_message_id, channel_id).to_a
