@@ -335,16 +335,24 @@ class App < Sinatra::Base
       end
     end
 
-    if !avatar_name.nil? && !avatar_data.nil?
+    avatar_is_present = !avatar_name.nil? && !avatar_data.nil?
+    display_name_is_present = !display_name.nil? || !display_name.empty?
+
+    if avatar_is_present
       open("../public/icons/#{avatar_name}", 'wb') do |file|
         file.print(avatar_data)
       end
+    end
+
+    if avatar_is_present && display_name_is_present
+      statement = db.prepare('UPDATE user SET avatar_icon = ?, display_name = ? WHERE id = ?')
+      statement.execute(avatar_name, display_name, user['id'])
+      statement.close
+    elsif avatar_is_present
       statement = db.prepare('UPDATE user SET avatar_icon = ? WHERE id = ?')
       statement.execute(avatar_name, user['id'])
       statement.close
-    end
-
-    if !display_name.nil? || !display_name.empty?
+    elsif display_name_is_present
       statement = db.prepare('UPDATE user SET display_name = ? WHERE id = ?')
       statement.execute(display_name, user['id'])
       statement.close
