@@ -7,9 +7,7 @@ class App < Sinatra::Base
     set :session_secret, 'tonymoris'
     set :public_folder, File.expand_path('../../public', __FILE__)
     set :avatar_max_size, 1 * 1024 * 1024
-    set :users_from_db, -> do
-      return @users_from_db if @users_from_db
-
+    set :users_from_db, -> {
       db_client = Mysql2::Client.new(
         host: ENV.fetch('ISUBATA_DB_HOST') { 'localhost' },
         port: ENV.fetch('ISUBATA_DB_PORT') { '3306' },
@@ -19,12 +17,10 @@ class App < Sinatra::Base
         encoding: 'utf8mb4'
       )
       db_client.query('SET SESSION sql_mode=\'TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY\'')
-
-      statement = db_client.prepare('SELECT * FROM user')
-      @users_from_db = statement.execute.to_a
-      @users_from_db
-    end
-
+      db_client.query('SELECT * FROM user').to_a.each_with_object({}) do |row, hash|
+        hash[row['id']] = row
+      end
+    }
     enable :sessions
   end
 
@@ -43,7 +39,7 @@ class App < Sinatra::Base
       user_id = session[:user_id]
       return nil if user_id.nil?
 
-      @_user = settings.users_from_db.find { |u| u["id"] == user_id } || db_get_user(user_id)
+      @_user = get_user(user_id)
       if @_user.nil?
         params[:user_id] = nil
         return nil
@@ -140,27 +136,32 @@ class App < Sinatra::Base
     channel_id = params[:channel_id].to_i
     last_message_id = params[:last_message_id].to_i
     # IDEA: selectするカラムを絞る
-    statement = db.prepare('SELECT * FROM message WHERE id > ? AND channel_id = ? ORDER BY id DESC LIMIT 100')
+    query = <<~SQL
+      SELECT msg.id AS id, msg.created_at, msg.content, user.name, user.display_name, user.avatar_icon
+      FROM message AS msg INNER JOIN user ON msg.user_id = user.id
+      WHERE msg.id > ? AND msg.channel_id = ? ORDER BY msg.id DESC LIMIT 100
+    SQL
+    statement = db.prepare(query)
     rows = statement.execute(last_message_id, channel_id).to_a
-    response = []
-    rows.each do |row|
-      r = {}
-      r['id'] = row['id']
-      statement = db.prepare('SELECT name, display_name, avatar_icon FROM user WHERE id = ?')
-      r['user'] = statement.execute(row['user_id']).first
-      r['date'] = row['created_at'].strftime("%Y/%m/%d %H:%M:%S")
-      r['content'] = row['content']
-      response << r
-      statement.close
-    end
-    response.reverse!
+    response = rows.map do |row|
+      { id: row['id'],
+        user: {
+          name: row['name'],
+          display_name: row['display_name'],
+          avatar_icon: row['avatar_icon']
+        },
+        date: row['created_at'].strftime("%Y/%m/%d %H:%M:%S"),
+        content: row['content']
+      }
+    end.reverse
 
-    max_message_id = rows.empty? ? 0 : rows.map { |row| row['id'] }.max
-    statement = db.prepare([
-      'INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at) ',
-      'VALUES (?, ?, ?, NOW(), NOW()) ',
-      'ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()',
-    ].join)
+    max_message_id = rows.empty? ? 0 : rows.first['id']
+    statement = db.prepare(<<~SQL
+      INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)
+      VALUES (?, ?, ?, NOW(), NOW())
+      ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()
+    SQL
+    )
     statement.execute(user_id, channel_id, max_message_id, max_message_id)
 
     content_type :json
@@ -369,6 +370,10 @@ class App < Sinatra::Base
     @db_client
   end
 
+  def get_user(user_id)
+    settings.users_from_db.fetch(user_id, db_get_user(user_id))
+  end
+
   def db_get_user(user_id)
     # IDEA: LIMIT 1
     statement = db.prepare('SELECT * FROM user WHERE id = ?')
@@ -409,18 +414,5 @@ class App < Sinatra::Base
       end
     end
     [channels, description]
-  end
-
-  def ext2mime(ext)
-    if ['.jpg', '.jpeg'].include?(ext)
-      return 'image/jpeg'
-    end
-    if ext == '.png'
-      return 'image/png'
-    end
-    if ext == '.gif'
-      return 'image/gif'
-    end
-    ''
   end
 end
