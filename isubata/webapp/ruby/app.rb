@@ -18,6 +18,7 @@ class App < Sinatra::Base
 
   helpers do
     def user
+      # IDEA: userテーブルは1万件程度なので、キャッシュに全部もってなるべくDB見ないようにする
       return @_user unless @_user.nil?
 
       user_id = session[:user_id]
@@ -85,8 +86,10 @@ class App < Sinatra::Base
 
   post '/login' do
     name = params[:name]
+    # IDEA: selectするカラムを絞る
     statement = db.prepare('SELECT * FROM user WHERE name = ?')
     row = statement.execute(name).first
+    # もしかして: hexdigetsとかって遅い？
     if row.nil? || row['password'] != Digest::SHA1.hexdigest(row['salt'] + params[:password])
       return 403
     end
@@ -118,6 +121,7 @@ class App < Sinatra::Base
 
     channel_id = params[:channel_id].to_i
     last_message_id = params[:last_message_id].to_i
+    # IDEA: selectするカラムを絞る
     statement = db.prepare('SELECT * FROM message WHERE id > ? AND channel_id = ? ORDER BY id DESC LIMIT 100')
     rows = statement.execute(last_message_id, channel_id).to_a
     response = []
@@ -158,15 +162,18 @@ class App < Sinatra::Base
 
     res = []
     channel_ids.each do |channel_id|
+      # IDEA: channelごとにクエリするんじゃなくて、havereadもそんなに多くないからガツッとデータ持っておいてuserごとにメモリ上で引く方が良さそう
       statement = db.prepare('SELECT * FROM haveread WHERE user_id = ? AND channel_id = ?')
       row = statement.execute(user_id, channel_id).first
       statement.close
       r = {}
       r['channel_id'] = channel_id
       r['unread'] = if row.nil?
+        # IDEA: COUNT(id) とかにする
         statement = db.prepare('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?')
         statement.execute(channel_id).first['cnt']
       else
+        # IDEA: COUNT(id) とかにする
         statement = db.prepare('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id')
         statement.execute(channel_id, row['message_id']).first['cnt']
       end
@@ -175,6 +182,7 @@ class App < Sinatra::Base
     end
 
     content_type :json
+    # IDEA: to_jsonじゃなくてOj使う
     res.to_json
   end
 
@@ -189,12 +197,15 @@ class App < Sinatra::Base
     if @page.nil?
       @page = '1'
     end
+    # もしかして: ここの正規表現マッチング遅い？
     if @page !~ /\A\d+\Z/ || @page == '0'
       return 400
     end
     @page = @page.to_i
 
+    # nってなんやねｎ
     n = 20
+    # IDEA: selectするカラムを絞る
     statement = db.prepare('SELECT * FROM message WHERE channel_id = ? ORDER BY id DESC LIMIT ? OFFSET ?')
     rows = statement.execute(@channel_id, n, (@page - 1) * n).to_a
     statement.close
@@ -211,6 +222,7 @@ class App < Sinatra::Base
     end
     @messages.reverse!
 
+    # IDEA: COUNT(id)とかにする
     statement = db.prepare('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?')
     cnt = statement.execute(@channel_id).first['cnt'].to_f
     statement.close
@@ -230,6 +242,7 @@ class App < Sinatra::Base
     @channels, = get_channel_list_info
 
     user_name = params[:user_name]
+    # IDEA: selectするカラムを絞る
     statement = db.prepare('SELECT * FROM user WHERE name = ?')
     @user = statement.execute(user_name).first
     statement.close
@@ -241,7 +254,7 @@ class App < Sinatra::Base
     @self_profile = user['id'] == @user['id']
     erb :profile
   end
-  
+
   get '/add_channel' do
     if user.nil?
       return redirect '/login', 303
@@ -322,6 +335,7 @@ class App < Sinatra::Base
 
   get '/icons/:file_name' do
     file_name = params[:file_name]
+    # IDEA: dataカラムしか使ってナサソウなのでselect dataにする、あとLIMIT 1
     statement = db.prepare('SELECT * FROM image WHERE name = ?')
     row = statement.execute(file_name).first
     statement.close
@@ -352,6 +366,7 @@ class App < Sinatra::Base
   end
 
   def db_get_user(user_id)
+    # IDEA: LIMIT 1
     statement = db.prepare('SELECT * FROM user WHERE id = ?')
     user = statement.execute(user_id).first
     statement.close
@@ -366,6 +381,7 @@ class App < Sinatra::Base
   end
 
   def random_string(n)
+    # IDEA: saltとか固定でよくね？あるいは定数化するなり組み込みのクラス使うなりで高速化
     Array.new(20).map { (('a'..'z').to_a + ('A'..'Z').to_a + ('0'..'9').to_a).sample }.join
   end
 
