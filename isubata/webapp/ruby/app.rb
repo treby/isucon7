@@ -7,6 +7,23 @@ class App < Sinatra::Base
     set :session_secret, 'tonymoris'
     set :public_folder, File.expand_path('../../public', __FILE__)
     set :avatar_max_size, 1 * 1024 * 1024
+    set :users_from_db, -> do
+      return @users_from_db if @users_from_db
+
+      db_client = Mysql2::Client.new(
+        host: ENV.fetch('ISUBATA_DB_HOST') { 'localhost' },
+        port: ENV.fetch('ISUBATA_DB_PORT') { '3306' },
+        username: ENV.fetch('ISUBATA_DB_USER') { 'root' },
+        password: ENV.fetch('ISUBATA_DB_PASSWORD') { '' },
+        database: 'isubata',
+        encoding: 'utf8mb4'
+      )
+      db_client.query('SET SESSION sql_mode=\'TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY\'')
+
+      statement = db_client.prepare('SELECT * FROM user')
+      @users_from_db = statement.execute.to_a
+      @users_from_db
+    end
 
     enable :sessions
   end
@@ -21,13 +38,12 @@ class App < Sinatra::Base
 
   helpers do
     def user
-      # IDEA: userテーブルは1万件程度なので、キャッシュに全部もってなるべくDB見ないようにする
       return @_user unless @_user.nil?
 
       user_id = session[:user_id]
       return nil if user_id.nil?
 
-      @_user = db_get_user(user_id)
+      @_user = settings.users_from_db.find { |u| u["id"] == user_id } || db_get_user(user_id)
       if @_user.nil?
         params[:user_id] = nil
         return nil
