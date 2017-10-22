@@ -2,11 +2,14 @@ require 'mysql2'
 
 class ImageMigrater
   def execute
+    target_dir = '../public/icons'
+
+    Dir.mkdir(target_dir, 0644) unless Dir.exist?(target_dir)
     rows = db.query('SELECT name, data FROM image').to_a
     rows.each do |row|
       file_name = row['name']
       data = row['data']
-      open("../public/icons/#{file_name}", 'wb') do |file|
+      open("#{target_dir}/#{file_name}", 'wb') do |file|
         file.print(data)
       end
     end
