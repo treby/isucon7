@@ -152,11 +152,12 @@ class App < Sinatra::Base
     response.reverse!
 
     max_message_id = rows.empty? ? 0 : rows.map { |row| row['id'] }.max
-    statement = db.prepare([
-      'INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at) ',
-      'VALUES (?, ?, ?, NOW(), NOW()) ',
-      'ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()',
-    ].join)
+    statement = db.prepare(<<~SQL
+      INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)
+      VALUES (?, ?, ?, NOW(), NOW())
+      ON DUPLICATE KEY UPDATE message_id = ?, updated_at = NOW()
+    SQL
+    )
     statement.execute(user_id, channel_id, max_message_id, max_message_id)
 
     content_type :json
