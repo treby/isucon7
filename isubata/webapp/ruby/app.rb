@@ -410,17 +410,4 @@ class App < Sinatra::Base
     end
     [channels, description]
   end
-
-  def ext2mime(ext)
-    if ['.jpg', '.jpeg'].include?(ext)
-      return 'image/jpeg'
-    end
-    if ext == '.png'
-      return 'image/png'
-    end
-    if ext == '.gif'
-      return 'image/gif'
-    end
-    ''
-  end
 end
