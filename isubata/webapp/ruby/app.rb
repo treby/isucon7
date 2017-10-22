@@ -8,6 +8,7 @@ class App < Sinatra::Base
     set :public_folder, File.expand_path('../../public', __FILE__)
     set :avatar_max_size, 1 * 1024 * 1024
     set :users_from_db, -> {
+      return @_users_from_db if @_users_from_db
       db_client = Mysql2::Client.new(
         host: ENV.fetch('ISUBATA_DB_HOST') { 'localhost' },
         port: ENV.fetch('ISUBATA_DB_PORT') { '3306' },
@@ -17,7 +18,7 @@ class App < Sinatra::Base
         encoding: 'utf8mb4'
       )
       db_client.query('SET SESSION sql_mode=\'TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY\'')
-      db_client.query('SELECT * FROM user').to_a.each_with_object({}) do |row, hash|
+      @_users_from_db = db_client.query('SELECT id FROM user').to_a.each_with_object({}) do |row, hash|
         hash[row['id']] = row
       end
     }
@@ -139,7 +140,7 @@ class App < Sinatra::Base
     query = <<~SQL
       SELECT msg.id AS id, msg.created_at, msg.content, user.name, user.display_name, user.avatar_icon
       FROM message AS msg INNER JOIN user ON msg.user_id = user.id
-      WHERE msg.id > ? AND msg.channel_id = ? ORDER BY msg.id DESC LIMIT 100
+      WHERE msg.id > ? AND msg.channel_id = ? ORDER BY msg.id DESC
     SQL
     statement = db.prepare(query)
     rows = statement.execute(last_message_id, channel_id).to_a
@@ -375,8 +376,7 @@ class App < Sinatra::Base
   end
 
   def db_get_user(user_id)
-    # IDEA: LIMIT 1
-    statement = db.prepare('SELECT * FROM user WHERE id = ?')
+    statement = db.prepare('SELECT id FROM user WHERE id = ? LIMIT 1')
     user = statement.execute(user_id).first
     statement.close
     user
