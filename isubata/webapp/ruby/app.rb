@@ -18,7 +18,7 @@ class App < Sinatra::Base
         encoding: 'utf8mb4'
       )
       db_client.query('SET SESSION sql_mode=\'TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY\'')
-      @_users_from_db = db_client.query('SELECT id, name, display_name FROM user').to_a.each_with_object({}) do |row, hash|
+      @_users_from_db = db_client.query('SELECT id, name, display_name, avatar_icon FROM user').to_a.each_with_object({}) do |row, hash|
         hash[row['id']] = row
       end
     }
@@ -376,7 +376,7 @@ class App < Sinatra::Base
   end
 
   def db_get_user(user_id)
-    statement = db.prepare('SELECT id, name, display_name FROM user WHERE id = ? LIMIT 1')
+    statement = db.prepare('SELECT id, name, display_name, avatar_icon FROM user WHERE id = ? LIMIT 1')
     user = statement.execute(user_id).first
     statement.close
     user
