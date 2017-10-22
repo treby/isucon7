@@ -136,22 +136,26 @@ class App < Sinatra::Base
     channel_id = params[:channel_id].to_i
     last_message_id = params[:last_message_id].to_i
     # IDEA: selectするカラムを絞る
-    statement = db.prepare('SELECT * FROM message WHERE id > ? AND channel_id = ? ORDER BY id DESC LIMIT 100')
+    query = <<~SQL
+      SELECT msg.id AS id, msg.created_at, msg.content, user.name, user.display_name, user.avatar_icon
+      FROM message AS msg INNER JOIN user ON msg.user_id = user.id
+      WHERE msg.id > ? AND msg.channel_id = ? ORDER BY msg.id DESC LIMIT 100
+    SQL
+    statement = db.prepare(query)
     rows = statement.execute(last_message_id, channel_id).to_a
-    response = []
-    rows.each do |row|
-      r = {}
-      r['id'] = row['id']
-      statement = db.prepare('SELECT name, display_name, avatar_icon FROM user WHERE id = ?')
-      r['user'] = statement.execute(row['user_id']).first
-      r['date'] = row['created_at'].strftime("%Y/%m/%d %H:%M:%S")
-      r['content'] = row['content']
-      response << r
-      statement.close
-    end
-    response.reverse!
+    response = rows.map do |row|
+      { id: row['id'],
+        user: {
+          name: row['name'],
+          display_name: row['display_name'],
+          avatar_icon: row['avatar_icon']
+        },
+        date: row['created_at'].strftime("%Y/%m/%d %H:%M:%S"),
+        content: row['content']
+      }
+    end.reverse
 
-    max_message_id = rows.empty? ? 0 : rows.map { |row| row['id'] }.max
+    max_message_id = rows.empty? ? 0 : rows.first['id']
     statement = db.prepare(<<~SQL
       INSERT INTO haveread (user_id, channel_id, message_id, updated_at, created_at)
       VALUES (?, ?, ?, NOW(), NOW())
