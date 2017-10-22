@@ -14,6 +14,7 @@ class App < Sinatra::Base
   configure :development do
     require 'sinatra/reloader'
     require 'rack-mini-profiler'
+    require 'pry'
     register Sinatra::Reloader
     use Rack::MiniProfiler
   end
