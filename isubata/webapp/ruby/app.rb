@@ -8,6 +8,7 @@ class App < Sinatra::Base
     set :public_folder, File.expand_path('../../public', __FILE__)
     set :avatar_max_size, 1 * 1024 * 1024
     set :users_from_db, -> {
+      return @_users_from_db if @_users_from_db
       db_client = Mysql2::Client.new(
         host: ENV.fetch('ISUBATA_DB_HOST') { 'localhost' },
         port: ENV.fetch('ISUBATA_DB_PORT') { '3306' },
@@ -17,7 +18,7 @@ class App < Sinatra::Base
         encoding: 'utf8mb4'
       )
       db_client.query('SET SESSION sql_mode=\'TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY\'')
-      db_client.query('SELECT * FROM user').to_a.each_with_object({}) do |row, hash|
+      @_users_from_db = db_client.query('SELECT * FROM user').to_a.each_with_object({}) do |row, hash|
         hash[row['id']] = row
       end
     }
