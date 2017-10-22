@@ -228,22 +228,20 @@ class App < Sinatra::Base
     query = <<~SQL
       SELECT msg.id AS id, msg.created_at, msg.content, user.name, user.display_name, user.avatar_icon
       FROM message AS msg INNER JOIN user ON msg.user_id = user.id
-      WHERE msg.id > ? AND msg.channel_id = ? ORDER BY msg.id DESC LIMIT ? OFFSET ?
+      WHERE msg.channel_id = ? ORDER BY msg.id DESC LIMIT ? OFFSET ?
     SQL
     rows = db.prepare(query).execute(@channel_id, n, (@page - 1) * n).to_a
-    statement.close
     @messages = rows.map do |row|
-      { id: row['id'],
-        user: {
-          name: row['name'],
-          display_name: row['display_name'],
-          avatar_icon: row['avatar_icon']
+      { 'id' => row['id'],
+        'user' => {
+          'name' => row['name'],
+          'display_name' => row['display_name'],
+          'avatar_icon' => row['avatar_icon']
         },
-        date: row['created_at'].strftime("%Y/%m/%d %H:%M:%S"),
-        content: row['content']
+        'date' => row['created_at'].strftime("%Y/%m/%d %H:%M:%S"),
+        'content' => row['content']
       }
     end.reverse
-
     statement = db.prepare('SELECT COUNT(id) as cnt FROM message WHERE channel_id = ?')
     cnt = statement.execute(@channel_id).first['cnt'].to_f
     statement.close
