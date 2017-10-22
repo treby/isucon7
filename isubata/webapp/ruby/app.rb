@@ -55,7 +55,6 @@ class App < Sinatra::Base
 
   get '/initialize' do
     db.query("DELETE FROM user WHERE id > 1000")
-    db.query("DELETE FROM image WHERE id > 1001")
     db.query("DELETE FROM channel WHERE id > 10")
     db.query("DELETE FROM message WHERE id > 10000")
     db.query("DELETE FROM haveread")
