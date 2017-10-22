@@ -136,7 +136,6 @@ class App < Sinatra::Base
 
     channel_id = params[:channel_id].to_i
     last_message_id = params[:last_message_id].to_i
-    # IDEA: selectするカラムを絞る
     query = <<~SQL
       SELECT msg.id AS id, msg.created_at, msg.content, user.name, user.display_name, user.avatar_icon
       FROM message AS msg INNER JOIN user ON msg.user_id = user.id
@@ -217,33 +216,35 @@ class App < Sinatra::Base
     if @page.nil?
       @page = '1'
     end
-    # もしかして: ここの正規表現マッチング遅い？
-    if @page !~ /\A\d+\Z/ || @page == '0'
+
+    begin
+      @page = Integer(@page)
+    rescue ArgumentError
       return 400
     end
-    @page = @page.to_i
+    return 400 if @page < 1
 
-    # nってなんやねｎ
     n = 20
-    # IDEA: selectするカラムを絞る
-    statement = db.prepare('SELECT * FROM message WHERE channel_id = ? ORDER BY id DESC LIMIT ? OFFSET ?')
-    rows = statement.execute(@channel_id, n, (@page - 1) * n).to_a
+    query = <<~SQL
+      SELECT msg.id AS id, msg.created_at, msg.content, user.name, user.display_name, user.avatar_icon
+      FROM message AS msg INNER JOIN user ON msg.user_id = user.id
+      WHERE msg.id > ? AND msg.channel_id = ? ORDER BY msg.id DESC LIMIT ? OFFSET ?
+    SQL
+    rows = db.prepare(query).execute(@channel_id, n, (@page - 1) * n).to_a
     statement.close
-    @messages = []
-    rows.each do |row|
-      r = {}
-      r['id'] = row['id']
-      statement = db.prepare('SELECT name, display_name, avatar_icon FROM user WHERE id = ?')
-      r['user'] = statement.execute(row['user_id']).first
-      r['date'] = row['created_at'].strftime("%Y/%m/%d %H:%M:%S")
-      r['content'] = row['content']
-      @messages << r
-      statement.close
-    end
-    @messages.reverse!
+    @messages = rows.map do |row|
+      { id: row['id'],
+        user: {
+          name: row['name'],
+          display_name: row['display_name'],
+          avatar_icon: row['avatar_icon']
+        },
+        date: row['created_at'].strftime("%Y/%m/%d %H:%M:%S"),
+        content: row['content']
+      }
+    end.reverse
 
-    # IDEA: COUNT(id)とかにする
-    statement = db.prepare('SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?')
+    statement = db.prepare('SELECT COUNT(id) as cnt FROM message WHERE channel_id = ?')
     cnt = statement.execute(@channel_id).first['cnt'].to_f
     statement.close
     @max_page = cnt == 0 ? 1 :(cnt / n).ceil
